@@ -151,8 +151,9 @@ public partial class MainWindowViewModel : ObservableObject
     {
         bool baseExists = Directory.Exists(Path.Combine(_missionsDir, "base")) && Directory.EnumerateFileSystemEntries(Path.Combine(_missionsDir, "base")).Any();
         bool fobExists = Directory.Exists(Path.Combine(_missionsDir, "fob")) && Directory.EnumerateFileSystemEntries(Path.Combine(_missionsDir, "fob")).Any();
+        bool langExists = File.Exists(Path.Combine(_missionsDir, "ugc_languages.json.gz"));
         
-        if (baseExists && fobExists) SetStep(3);
+        if (baseExists && fobExists && langExists) SetStep(3);
         else SetStep(2);
     }
 
@@ -330,53 +331,80 @@ public partial class MainWindowViewModel : ObservableObject
         using var client = new HttpClient();
         client.Timeout = TimeSpan.FromMinutes(30);
 
-        Log("Downloading inFAMOUS 2 base missions...");
-        var baseBytes = await DownloadMissionsBufferedAsync("https://archive.org/download/infamous-2-ugc/maps_by_name.zip", client);
-        string baseZip = Path.Combine(_missionsDir, "base.zip");
-
-        Log("  > Extracting .zip and copying base missions...");
-        await File.WriteAllBytesAsync(baseZip, baseBytes);
-        
-        await Task.Run(() => 
+        bool baseExists = Directory.Exists(Path.Combine(_missionsDir, "base")) && Directory.EnumerateFileSystemEntries(Path.Combine(_missionsDir, "base")).Any();
+        if (!baseExists)
         {
-            string tempBase = Path.Combine(_missionsDir, "temp_base");
-            ExtractZip(baseZip, tempBase);
-            string finalBase = Path.Combine(_missionsDir, "base");
-            if (Directory.Exists(finalBase)) Directory.Delete(finalBase, true);
-            Directory.Move(Path.Combine(tempBase, "maps_by_name"), finalBase);
-            Directory.Delete(tempBase, true);
-        });
+            Log("Downloading inFAMOUS 2 base missions...");
+            var baseBytes = await DownloadMissionsBufferedAsync("https://archive.org/download/infamous-2-ugc/maps_by_name.zip", client);
+            string baseZip = Path.Combine(_missionsDir, "base.zip");
 
-        Log("Downloading base missions catalog...");
-        string baseCatalogUrl = "https://github.com/adamstark1/inFAMOUS-Reborn-PS3/raw/refs/heads/main/Missions/ugc_missions_base.json.gz";
-        var baseCatalogBytes = await DownloadMissionsBufferedAsync(baseCatalogUrl, client);
-        await File.WriteAllBytesAsync(Path.Combine(_missionsDir, "ugc_missions_base.json.gz"), baseCatalogBytes);
+            Log("  > Extracting .zip and copying base missions...");
+            await File.WriteAllBytesAsync(baseZip, baseBytes);
+            
+            await Task.Run(() => 
+            {
+                string tempBase = Path.Combine(_missionsDir, "temp_base");
+                ExtractZip(baseZip, tempBase);
+                string finalBase = Path.Combine(_missionsDir, "base");
+                if (Directory.Exists(finalBase)) Directory.Delete(finalBase, true);
+                Directory.Move(Path.Combine(tempBase, "maps_by_name"), finalBase);
 
-        Log("Downloading Festival of Blood (FoB) missions...");
-        var fobBytes = await DownloadMissionsBufferedAsync("https://archive.org/download/infamous-fob-ugc/maps_by_name.zip", client);
-        string fobZip = Path.Combine(_missionsDir, "fob.zip");
+                Directory.Delete(tempBase, true);
+                File.Delete(baseZip);
+            });
+        }
 
-        Log("  > Extracting .zip and copying FoB missions...");
-        await File.WriteAllBytesAsync(fobZip, fobBytes);
-        
-        await Task.Run(() => 
+        bool baseCatalogExists = File.Exists(Path.Combine(_missionsDir, "ugc_missions_base.json.gz"));
+        if (!baseCatalogExists)
         {
-            string tempFob = Path.Combine(_missionsDir, "temp_fob");
-            ExtractZip(fobZip, tempFob);
-            string finalFob = Path.Combine(_missionsDir, "fob");
-            if (Directory.Exists(finalFob)) Directory.Delete(finalFob, true);
-            Directory.Move(Path.Combine(tempFob, "maps_by_name"), finalFob);
-            Directory.Delete(tempFob, true);
-        });
+            Log("Downloading base missions catalog...");
+            string baseCatalogUrl = "https://github.com/adamstark1/inFAMOUS-Reborn-PS3/raw/refs/heads/main/Missions/ugc_missions_base.json.gz";
+            var baseCatalogBytes = await DownloadMissionsBufferedAsync(baseCatalogUrl, client);
+            await File.WriteAllBytesAsync(Path.Combine(_missionsDir, "ugc_missions_base.json.gz"), baseCatalogBytes);
+        }
 
-        Log("Downloading FoB missions catalog...");
-        string fobCatalogUrl = "https://github.com/adamstark1/inFAMOUS-Reborn-PS3/raw/refs/heads/main/Missions/ugc_missions_fob.json.gz";
-        var fobCatalogBytes = await DownloadMissionsBufferedAsync(fobCatalogUrl, client);
-        await File.WriteAllBytesAsync(Path.Combine(_missionsDir, "ugc_missions_fob.json.gz"), fobCatalogBytes);
+        bool fobExists = Directory.Exists(Path.Combine(_missionsDir, "fob")) && Directory.EnumerateFileSystemEntries(Path.Combine(_missionsDir, "fob")).Any();
+        if (!fobExists)
+        {
+            Log("Downloading Festival of Blood (FoB) missions...");
+            var fobBytes = await DownloadMissionsBufferedAsync("https://archive.org/download/infamous-fob-ugc/maps_by_name.zip", client);
+            string fobZip = Path.Combine(_missionsDir, "fob.zip");
 
-        File.Delete(baseZip);
-        File.Delete(fobZip);
-        Log("Cleanup finished.");
+            Log("  > Extracting .zip and copying FoB missions...");
+            await File.WriteAllBytesAsync(fobZip, fobBytes);
+
+            await Task.Run(() =>
+            {
+                string tempFob = Path.Combine(_missionsDir, "temp_fob");
+                ExtractZip(fobZip, tempFob);
+                string finalFob = Path.Combine(_missionsDir, "fob");
+                if (Directory.Exists(finalFob)) Directory.Delete(finalFob, true);
+                Directory.Move(Path.Combine(tempFob, "maps_by_name"), finalFob);
+
+                Directory.Delete(tempFob, true);
+                File.Delete(fobZip);
+            });
+        }
+
+        bool fobCatalogExists = File.Exists(Path.Combine(_missionsDir, "ugc_missions_fob.json.gz"));
+        if (!fobCatalogExists)
+        {
+            Log("Downloading FoB missions catalog...");
+            string fobCatalogUrl = "https://github.com/adamstark1/inFAMOUS-Reborn-PS3/raw/refs/heads/main/Missions/ugc_missions_fob.json.gz";
+            var fobCatalogBytes = await DownloadMissionsBufferedAsync(fobCatalogUrl, client);
+            await File.WriteAllBytesAsync(Path.Combine(_missionsDir, "ugc_missions_fob.json.gz"), fobCatalogBytes);
+        }
+
+        bool langExists = File.Exists(Path.Combine(_missionsDir, "ugc_languages.json.gz"));
+        if (!langExists)
+        {
+            Log("Downloading mission languages...");
+            string languagesUrl = "https://github.com/saladthieves/inFAMOUS-Reborn-PS3/raw/refs/heads/main/Missions/ugc_languages.json.gz";
+            var languagesBytes = await DownloadMissionsBufferedAsync(languagesUrl, client);
+            await File.WriteAllBytesAsync(Path.Combine(_missionsDir, "ugc_languages.json.gz"), languagesBytes);
+        }
+
+        Log("All downloads completed.");
     }
 
     private async Task<byte[]> DownloadMissionsBufferedAsync(string url, HttpClient client)
